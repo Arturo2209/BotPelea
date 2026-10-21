@@ -1,0 +1,9 @@
+PON AQUI TUS ANIMACIONES DE MIXAMO (FBX, Without Skin, In Place) con estos nombres exactos:
+
+  Idle.fbx      (o Standing Idle, renombrado)
+  Walking.fbx
+  Running.fbx
+  Jumping.fbx
+
+Luego en Unity: menu  Personaje > Configurar escena
+Se configuran solas como Humanoid y reemplazan a las animaciones incluidas.
