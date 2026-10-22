@@ -18,11 +18,17 @@ public static class Entrada
     public static bool Saltar() => K != null && K.spaceKey.wasPressedThisFrame;
     public static Vector2 Mouse() => M != null ? M.delta.ReadValue() * 0.1f : Vector2.zero;
     public static float Rueda() => M != null ? M.scroll.ReadValue().y / 120f : 0f;
+    public static bool Reiniciar() => K != null && K.rKey.wasPressedThisFrame;
+    public static bool CambiarModo() => K != null && K.eKey.wasPressedThisFrame;
+    public static bool CambiarCamara() => K != null && K.cKey.wasPressedThisFrame;
 #else
     public static Vector2 Ejes() => new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
     public static bool Correr() => Input.GetKey(KeyCode.LeftShift);
     public static bool Saltar() => Input.GetKeyDown(KeyCode.Space);
     public static Vector2 Mouse() => new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
     public static float Rueda() => Input.mouseScrollDelta.y;
+    public static bool Reiniciar() => Input.GetKeyDown(KeyCode.R);
+    public static bool CambiarModo() => Input.GetKeyDown(KeyCode.E);
+    public static bool CambiarCamara() => Input.GetKeyDown(KeyCode.C);
 #endif
 }

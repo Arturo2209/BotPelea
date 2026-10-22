@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -14,11 +15,18 @@ using UnityEngine;
 /// </summary>
 public static class ConfigurarPersonaje
 {
-    const string Raiz = "Assets/Personaje";
+    public const string Raiz = "Assets/Personaje";
     const string Mixamo = Raiz + "/Mixamo";
     const string Generado = Raiz + "/Generado";
+    public const string EscenaMovimiento = Generado + "/Escena_Movimiento.unity";
 
-    [MenuItem("Personaje/Configurar escena")]
+    public class Clips
+    {
+        public AnimationClip idle, caminar, correr, salto;
+        public string origen;
+    }
+
+    [MenuItem("Personaje/Configurar escena", priority = 0)]
     public static void Menu()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -37,67 +45,47 @@ public static class ConfigurarPersonaje
         AssetDatabase.DeleteAsset(Generado);
         AssetDatabase.CreateFolder(Raiz, "Generado");
 
-        // ---------- 1) Animaciones ----------
-        string origen;
-        AnimationClip idle, caminar, correr, salto;
+        var clips = ObtenerClips();
+        var ctrl = CrearController(Generado + "/Personaje.controller", clips);
+
+        CrearEscena(ctrl);
+        EditorSceneManager.SaveScene(escena, EscenaMovimiento);
+        ActualizarBuild();
+        AssetDatabase.SaveAssets();
+        Debug.Log($"Personaje configurado con animaciones {clips.origen}. Escena: {EscenaMovimiento}");
+    }
+
+    /// <summary>Pone en Build Settings las escenas que existan (movimiento y laberinto).</summary>
+    public static void ActualizarBuild()
+    {
+        var lista = new List<EditorBuildSettingsScene>();
+        foreach (var ruta in new[] { EscenaMovimiento, LaberintoEditor.EscenaLaberinto })
+            if (File.Exists(ruta)) lista.Add(new EditorBuildSettingsScene(ruta, true));
+        EditorBuildSettings.scenes = lista.ToArray();
+    }
+
+    // ---------- Animaciones ----------
+
+    public static Clips ObtenerClips()
+    {
         if (File.Exists(Mixamo + "/Idle.fbx") && File.Exists(Mixamo + "/Walking.fbx") &&
             File.Exists(Mixamo + "/Running.fbx") && File.Exists(Mixamo + "/Jumping.fbx"))
+            return new Clips
+            {
+                idle = ClipMixamo(Mixamo + "/Idle.fbx", true),
+                caminar = ClipMixamo(Mixamo + "/Walking.fbx", true),
+                correr = ClipMixamo(Mixamo + "/Running.fbx", true),
+                salto = ClipMixamo(Mixamo + "/Jumping.fbx", false),
+                origen = "Mixamo",
+            };
+        return new Clips
         {
-            idle = ClipMixamo(Mixamo + "/Idle.fbx", true);
-            caminar = ClipMixamo(Mixamo + "/Walking.fbx", true);
-            correr = ClipMixamo(Mixamo + "/Running.fbx", true);
-            salto = ClipMixamo(Mixamo + "/Jumping.fbx", false);
-            origen = "Mixamo";
-        }
-        else
-        {
-            idle = Clip(Raiz + "/Animaciones/Idle.fbx");
-            caminar = Clip(Raiz + "/Animaciones/Walk.fbx");
-            correr = Clip(Raiz + "/Animaciones/Run.fbx");
-            salto = Clip(Raiz + "/Animaciones/JumpInAir.fbx");
-            origen = "incluidas";
-        }
-
-        // ---------- 2) Animator Controller ----------
-        var ctrl = AnimatorController.CreateAnimatorControllerAtPath(Generado + "/Personaje.controller");
-        ctrl.AddParameter("Speed", AnimatorControllerParameterType.Float);
-        ctrl.AddParameter("IsGrounded", AnimatorControllerParameterType.Bool);
-        ctrl.parameters = ctrl.parameters.Select(p => { if (p.name == "IsGrounded") p.defaultBool = true; return p; }).ToArray();
-        var sm = ctrl.layers[0].stateMachine;
-
-        // Blend Tree 1D por velocidad (m/s): 0 = Idle, 2 = Walk, 5.5 = Run
-        var locomocion = ctrl.CreateBlendTreeInController("Locomocion", out var arbol, 0);
-        arbol.blendType = BlendTreeType.Simple1D;
-        arbol.blendParameter = "Speed";
-        arbol.useAutomaticThresholds = false;
-        arbol.AddChild(idle, 0f);
-        arbol.AddChild(caminar, 2f);
-        arbol.AddChild(correr, 5.5f);
-        sm.defaultState = locomocion;
-
-        var estadoSalto = sm.AddState("Jump");
-        estadoSalto.motion = salto;
-
-        // Locomoción -> Salto: apenas deja el suelo (sin esperar a que termine la animación)
-        var aSalto = locomocion.AddTransition(estadoSalto);
-        aSalto.hasExitTime = false;
-        aSalto.duration = 0.1f;
-        aSalto.AddCondition(AnimatorConditionMode.IfNot, 0, "IsGrounded");
-
-        // Salto -> Locomoción: apenas toca el suelo
-        var aSuelo = estadoSalto.AddTransition(locomocion);
-        aSuelo.hasExitTime = false;
-        aSuelo.duration = 0.15f;
-        aSuelo.AddCondition(AnimatorConditionMode.If, 0, "IsGrounded");
-        AssetDatabase.SaveAssets();
-
-        // ---------- 3) Escena ----------
-        CrearEscena(ctrl);
-        string rutaEscena = Generado + "/Escena_Movimiento.unity";
-        EditorSceneManager.SaveScene(escena, rutaEscena);
-        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(rutaEscena, true) };
-        AssetDatabase.SaveAssets();
-        Debug.Log($"Personaje configurado con animaciones {origen}. Escena: {rutaEscena}");
+            idle = Clip(Raiz + "/Animaciones/Idle.fbx"),
+            caminar = Clip(Raiz + "/Animaciones/Walk.fbx"),
+            correr = Clip(Raiz + "/Animaciones/Run.fbx"),
+            salto = Clip(Raiz + "/Animaciones/JumpInAir.fbx"),
+            origen = "incluidas",
+        };
     }
 
     static AnimationClip Clip(string ruta) =>
@@ -111,8 +99,8 @@ public static class ConfigurarPersonaje
         imp.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
         imp.SaveAndReimport();
 
-        var clips = imp.defaultClipAnimations;
-        foreach (var c in clips)
+        var lista = imp.defaultClipAnimations;
+        foreach (var c in lista)
         {
             c.loopTime = bucle;
             c.lockRootRotation = true;      // "Bake Into Pose": que no gire solo
@@ -122,21 +110,102 @@ public static class ConfigurarPersonaje
             c.keepOriginalPositionY = true;
             c.keepOriginalPositionXZ = true;
         }
-        imp.clipAnimations = clips;
+        imp.clipAnimations = lista;
         imp.SaveAndReimport();
         return Clip(ruta);
     }
 
-    // ------------------------------------------------------------------
+    // ---------- Animator Controller ----------
 
-    static Material Mat(string nombre, Color color, Texture2D tex = null)
+    public static AnimatorController CrearController(string ruta, Clips clips)
+    {
+        var ctrl = AnimatorController.CreateAnimatorControllerAtPath(ruta);
+        ctrl.AddParameter("Speed", AnimatorControllerParameterType.Float);
+        ctrl.AddParameter("IsGrounded", AnimatorControllerParameterType.Bool);
+        ctrl.parameters = ctrl.parameters.Select(p => { if (p.name == "IsGrounded") p.defaultBool = true; return p; }).ToArray();
+        var sm = ctrl.layers[0].stateMachine;
+
+        // Blend Tree 1D por velocidad (m/s): 0 = Idle, 2 = Walk, 5.5 = Run
+        var locomocion = ctrl.CreateBlendTreeInController("Locomocion", out var arbol, 0);
+        arbol.blendType = BlendTreeType.Simple1D;
+        arbol.blendParameter = "Speed";
+        arbol.useAutomaticThresholds = false;
+        arbol.AddChild(clips.idle, 0f);
+        arbol.AddChild(clips.caminar, 2f);
+        arbol.AddChild(clips.correr, 5.5f);
+        sm.defaultState = locomocion;
+
+        var estadoSalto = sm.AddState("Jump");
+        estadoSalto.motion = clips.salto;
+
+        // Locomoción -> Salto: apenas deja el suelo (sin esperar a que termine la animación)
+        var aSalto = locomocion.AddTransition(estadoSalto);
+        aSalto.hasExitTime = false;
+        aSalto.duration = 0.1f;
+        aSalto.AddCondition(AnimatorConditionMode.IfNot, 0, "IsGrounded");
+
+        // Salto -> Locomoción: apenas toca el suelo
+        var aSuelo = estadoSalto.AddTransition(locomocion);
+        aSuelo.hasExitTime = false;
+        aSuelo.duration = 0.15f;
+        aSuelo.AddCondition(AnimatorConditionMode.If, 0, "IsGrounded");
+        AssetDatabase.SaveAssets();
+        return ctrl;
+    }
+
+    // ---------- Utilidades compartidas ----------
+
+    public static Material Mat(string carpeta, string nombre, Color color, Texture2D tex = null, Color? emision = null)
     {
         var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         var m = new Material(sh) { color = color };
         if (tex != null) { m.mainTexture = tex; m.mainTextureScale = new Vector2(30, 30); }
-        AssetDatabase.CreateAsset(m, $"{Generado}/{nombre}.mat");
+        if (emision.HasValue)
+        {
+            m.EnableKeyword("_EMISSION");
+            m.SetColor("_EmissionColor", emision.Value);
+        }
+        AssetDatabase.CreateAsset(m, $"{carpeta}/{nombre}.mat");
         return m;
     }
+
+    /// <summary>Crea el personaje (CharacterController + modelo con Animator) y lo devuelve.</summary>
+    public static GameObject CrearPersonaje(AnimatorController ctrl, Material material, out Animator animator)
+    {
+        var jugador = new GameObject("Jugador");
+        jugador.layer = 2; // Ignore Raycast: la cámara no choca con él
+        var cc = jugador.AddComponent<CharacterController>();
+        cc.height = 1.8f;
+        cc.radius = 0.3f;
+        cc.center = new Vector3(0, 0.93f, 0);
+        cc.stepOffset = 0.3f;
+
+        var modeloAsset = AssetDatabase.LoadAssetAtPath<GameObject>(Raiz + "/Modelo/Armature.fbx");
+        var modelo = (GameObject)PrefabUtility.InstantiatePrefab(modeloAsset, jugador.transform);
+        modelo.name = "Modelo";
+        foreach (var r in modelo.GetComponentsInChildren<Renderer>())
+            r.sharedMaterials = Enumerable.Repeat(material, r.sharedMaterials.Length).ToArray();
+        animator = modelo.GetComponent<Animator>();
+        if (animator == null) animator = modelo.AddComponent<Animator>();
+        animator.runtimeAnimatorController = ctrl;
+        animator.applyRootMotion = false;
+        if (animator.avatar == null)
+            animator.avatar = AssetDatabase.LoadAllAssetsAtPath(Raiz + "/Modelo/Armature.fbx").OfType<Avatar>().FirstOrDefault();
+        return jugador;
+    }
+
+    public static void Luz()
+    {
+        var sol = new GameObject("Sol").AddComponent<Light>();
+        sol.type = LightType.Directional;
+        sol.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+        sol.intensity = 1.2f;
+        sol.shadows = LightShadows.Soft;
+        RenderSettings.sun = sol;
+        RenderSettings.skybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
+    }
+
+    // ---------- Escena de movimiento ----------
 
     static Texture2D Cuadricula()
     {
@@ -169,19 +238,12 @@ public static class ConfigurarPersonaje
 
     static void CrearEscena(AnimatorController ctrl)
     {
-        // Luz y cielo
-        var sol = new GameObject("Sol").AddComponent<Light>();
-        sol.type = LightType.Directional;
-        sol.transform.rotation = Quaternion.Euler(45f, -35f, 0f);
-        sol.intensity = 1.2f;
-        sol.shadows = LightShadows.Soft;
-        RenderSettings.sun = sol;
-        RenderSettings.skybox = AssetDatabase.GetBuiltinExtraResource<Material>("Default-Skybox.mat");
+        Luz();
 
         // Suelo y obstáculos para practicar
-        var mSuelo = Mat("Suelo", Color.white, Cuadricula());
-        var mBloque = Mat("Bloque", new Color(0.95f, 0.6f, 0.25f));
-        var mBloque2 = Mat("Bloque2", new Color(0.3f, 0.6f, 0.9f));
+        var mSuelo = Mat(Generado, "Suelo", Color.white, Cuadricula());
+        var mBloque = Mat(Generado, "Bloque", new Color(0.95f, 0.6f, 0.25f));
+        var mBloque2 = Mat(Generado, "Bloque2", new Color(0.3f, 0.6f, 0.9f));
         var suelo = GameObject.CreatePrimitive(PrimitiveType.Plane);
         suelo.name = "Suelo";
         suelo.transform.localScale = new Vector3(6, 1, 6);
@@ -196,29 +258,8 @@ public static class ConfigurarPersonaje
             Caja("Caja" + i, new Vector3(-10 + i * 4f, 0.4f, -7), Vector3.one * 0.8f, i % 2 == 0 ? mBloque : mBloque2, new Vector3(0, i * 25, 0)).transform.SetParent(obst);
         Caja("Muro", new Vector3(0, 1.5f, 14), new Vector3(16, 3, 0.5f), mBloque2).transform.SetParent(obst);
 
-        // Personaje
-        var jugador = new GameObject("Jugador");
-        jugador.layer = 2; // Ignore Raycast: la cámara no choca con él
-        var cc = jugador.AddComponent<CharacterController>();
-        cc.height = 1.8f;
-        cc.radius = 0.3f;
-        cc.center = new Vector3(0, 0.93f, 0);
-        cc.stepOffset = 0.3f;
-
-        var modeloAsset = AssetDatabase.LoadAssetAtPath<GameObject>(Raiz + "/Modelo/Armature.fbx");
-        var modelo = (GameObject)PrefabUtility.InstantiatePrefab(modeloAsset, jugador.transform);
-        modelo.name = "Modelo";
-        var mCuerpo = Mat("Personaje", new Color(0.85f, 0.85f, 0.9f));
-        foreach (var r in modelo.GetComponentsInChildren<Renderer>())
-            r.sharedMaterials = Enumerable.Repeat(mCuerpo, r.sharedMaterials.Length).ToArray();
-        var animator = modelo.GetComponent<Animator>();
-        if (animator == null) animator = modelo.AddComponent<Animator>();
-        animator.runtimeAnimatorController = ctrl;
-        animator.applyRootMotion = false;
-        if (animator.avatar == null)
-            animator.avatar = AssetDatabase.LoadAllAssetsAtPath(Raiz + "/Modelo/Armature.fbx").OfType<Avatar>().FirstOrDefault();
-
-        // Cámara
+        // Personaje y cámara
+        var jugador = CrearPersonaje(ctrl, Mat(Generado, "Personaje", new Color(0.85f, 0.85f, 0.9f)), out var animator);
         var camGo = new GameObject("Camara");
         camGo.tag = "MainCamera";
         camGo.AddComponent<Camera>();
