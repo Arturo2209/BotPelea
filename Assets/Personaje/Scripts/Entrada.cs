@@ -21,6 +21,9 @@ public static class Entrada
     public static bool Reiniciar() => K != null && K.rKey.wasPressedThisFrame;
     public static bool CambiarModo() => K != null && K.eKey.wasPressedThisFrame;
     public static bool CambiarCamara() => K != null && K.cKey.wasPressedThisFrame;
+    public static bool GolpeRapido() => (M != null && M.leftButton.wasPressedThisFrame) || (K != null && K.jKey.wasPressedThisFrame);
+    public static bool GolpeFuerte() => (M != null && M.rightButton.wasPressedThisFrame) || (K != null && K.kKey.wasPressedThisFrame);
+    public static bool Bloquear() => K != null && (K.fKey.isPressed || K.lKey.isPressed);
 #else
     public static Vector2 Ejes() => new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
     public static bool Correr() => Input.GetKey(KeyCode.LeftShift);
@@ -30,5 +33,8 @@ public static class Entrada
     public static bool Reiniciar() => Input.GetKeyDown(KeyCode.R);
     public static bool CambiarModo() => Input.GetKeyDown(KeyCode.E);
     public static bool CambiarCamara() => Input.GetKeyDown(KeyCode.C);
+    public static bool GolpeRapido() => Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.J);
+    public static bool GolpeFuerte() => Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.K);
+    public static bool Bloquear() => Input.GetKey(KeyCode.F) || Input.GetKey(KeyCode.L);
 #endif
 }

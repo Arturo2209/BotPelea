@@ -59,7 +59,7 @@ public static class ConfigurarPersonaje
     public static void ActualizarBuild()
     {
         var lista = new List<EditorBuildSettingsScene>();
-        foreach (var ruta in new[] { EscenaMovimiento, LaberintoEditor.EscenaLaberinto })
+        foreach (var ruta in new[] { EscenaMovimiento, LaberintoEditor.EscenaLaberinto, PeleaEditor.EscenaPelea })
             if (File.Exists(ruta)) lista.Add(new EditorBuildSettingsScene(ruta, true));
         EditorBuildSettings.scenes = lista.ToArray();
     }
